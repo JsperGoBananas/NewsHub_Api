@@ -18,6 +18,12 @@
             <version>3.8.1</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.15.4</version> <!-- 使用最新版本 -->
+        </dependency>
+
     </dependencies>
     <build>
         <finalName>NewsHub-API</finalName>
