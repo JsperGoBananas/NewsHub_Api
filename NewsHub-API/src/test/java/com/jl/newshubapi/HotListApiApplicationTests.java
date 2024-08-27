@@ -2,6 +2,7 @@ package com.jl.newshubapi;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.jl.newshubapi.model.entity.Website;
+import com.jl.newshubapi.quartz.DataImport;
 import com.jl.newshubapi.service.ArticleService;
 import com.jl.newshubapi.service.IWebsiteService;
 import com.jl.newshubapi.utils.RSSUtil;
@@ -32,6 +33,9 @@ class HotListApiApplicationTests {
 
     @Autowired
     private IWebsiteService websiteService;
+
+    @Autowired
+    private DataImport dataImport;
     @Test
     void contextLoads() {
     }
@@ -193,7 +197,8 @@ class HotListApiApplicationTests {
 
     @Test
     void testGetArticleListBySource2(){
-        System.out.println(RSSUtil.getBaseUrl("https://www.ifanr.com?utm_source=rss&utm_medium=rss&utm_campaign="));
+//        System.out.println(RSSUtil.getBaseUrl("https://www.ifanr.com?utm_source=rss&utm_medium=rss&utm_campaign="));
+        dataImport.importData();
     }
 
 

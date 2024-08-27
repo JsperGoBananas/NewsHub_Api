@@ -74,7 +74,7 @@ public class RSSUtil {
         try {
             doc = Jsoup.connect(url).get();
         } catch (IOException e) {
-            log.error("无法获取"+url"主页", e);
+            log.error("无法获取"+url+"主页", e);
             return url+"/favicon.ico";
         }
 
