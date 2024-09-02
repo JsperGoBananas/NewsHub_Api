@@ -1,6 +1,7 @@
 package com.jl.newshubapi.controller;
 
 
+import com.jl.newshubapi.annotation.RateLimit;
 import com.jl.newshubapi.model.dtos.NewsTimeLineDto;
 import com.jl.newshubapi.model.dtos.ResponseResult;
 import com.jl.newshubapi.service.ArticleService;
@@ -17,17 +18,18 @@ public class HotListController {
 
     @Autowired
     ArticleService articleService;
-
+    @RateLimit(requests = 100, windowSeconds = 60)
     @GetMapping("/{source}")
     public ResponseResult getHotList(@PathVariable("source") String source) {
         return articleService.getArticleList(source);
     }
-
+    @RateLimit(requests = 100, windowSeconds = 60)
     @PostMapping("/timeline")
     public ResponseResult getTimeline(@RequestBody NewsTimeLineDto newsTimeLineDto) {
         return articleService.getNewsTimeLine(newsTimeLineDto);
     }
 
+    @RateLimit(requests = 1, windowSeconds = 60)
     @PostMapping("/update")
     public ResponseResult updateHotList(@RequestParam("id") Integer id) {
         return articleService.fetchNewArticles(id);
