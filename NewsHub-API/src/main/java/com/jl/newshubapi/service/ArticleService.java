@@ -20,11 +20,11 @@ public interface ArticleService extends IService<Article> {
 
     ResponseResult getArticleList(String source);
 
-    void saveOnlineArticle(String url, Integer datasourceId);
+    int saveOnlineArticle(String url, Integer datasourceId);
 
     void saveOnlineArticle(Request request, Integer dataSource);
     //For RSS
-    void saveOnlineArticle(String url);
+    int saveOnlineArticle(String url);
 
     ResponseResult getNewsTimeLine(NewsTimeLineDto newsTimeLineDto);
 

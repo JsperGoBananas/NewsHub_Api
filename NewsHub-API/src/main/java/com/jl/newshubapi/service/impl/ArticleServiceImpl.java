@@ -116,16 +116,16 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public void saveOnlineArticle(String url, Integer dataSource) {
+    public int saveOnlineArticle(String url, Integer dataSource) {
         String data = RequestHandler.get(url);
-        convertAndSave(data,dataSource);
+        return convertAndSave(data,dataSource);
 
     }
 
     @Override
-    public void saveOnlineArticle(String url) {
+    public int saveOnlineArticle(String url) {
         if (url == null || url.isEmpty()){
-            return ;
+            return 0;
         }
         SyndFeed feed = RSSUtil.getFeed(url);
         Website website = websiteService.getOne(new QueryWrapper<Website>().eq("fetch_data_url", url));
@@ -133,20 +133,28 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         RssConverter converter = new RssConverter();
         Article latestArticle = getOne(new QueryWrapper<Article>().eq("source", website.getId()).orderBy(true, false, "updated_time").last("limit 1"));
         List<Article> articleList = converter.convertToArticleList(feed, latestArticle == null ? null : latestArticle.getUpdatedTime());
-        if (articleList == null || articleList.size() == 0) {
+        if (articleList == null || articleList.isEmpty()) {
             log.info(website.getTitle()+"没有新文章");
-            return;
+            return 0;
         }
         int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
         for (Article article : articleList) {
             article.setSource(String.valueOf(website.getId()));
             article.setSortOrder(sortOrder--);
-
+        }
+        //去数据库中查询是否已经存在该文章,如果存在则从list移除
+        for (int i = articleList.size() - 1; i >= 0; i--) {
+            Article article = articleList.get(i);
+            Article one = getOne(new QueryWrapper<Article>().eq("title", article.getTitle()).eq("link", article.getLink()).last("limit 1"));
+            if (one != null) {
+                articleList.remove(i);
+            }
         }
         saveOrUpdateBatch(articleList);
         log.info("更新"+website.getTitle()+"文章"+articleList.size()+"篇");
         //删除redis中的数据
         redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+website.getId());
+        return articleList.size();
     }
 
 
@@ -170,15 +178,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
 
     @Transactional(rollbackFor = Exception.class)
-    public void convertAndSave(String data, Integer id){
+    public int convertAndSave(String data, Integer id){
         DataConverter converter = DataConverterFactory.getConverter(id);
         if (converter == null) {
             log.error("Can't find corresponding converter");
-            return;
+            return 0;
         }
         List<Article> articleList = converter.convertToArticleList(data);
         if (articleList == null || articleList.size() == 0) {
-            return;
+            return 0;
         }
         int sortOrder = getCurrentMaxOrder(id);
         //去数据库中查询是否已经存在该文章,如果存在则从list移除,逆序遍历
@@ -196,6 +204,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         saveOrUpdateBatch(articleList);
         //删除redis中的数据
         redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+id);
+        return articleList.size();
 
     }
 

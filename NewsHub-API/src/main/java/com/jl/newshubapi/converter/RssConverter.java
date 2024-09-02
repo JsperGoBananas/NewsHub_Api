@@ -5,10 +5,13 @@ import com.jl.newshubapi.utils.TimeUtil;
 import com.rometools.rome.feed.synd.SyndEnclosure;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
+import org.jdom2.Attribute;
 import org.jdom2.Element;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 public class RssConverter{
@@ -17,6 +20,11 @@ public class RssConverter{
         // 获取所有内容项
         List<Article> articles = new ArrayList<>();
         List<SyndEntry> entries = feed.getEntries();
+        //如果entry的getPublishedDate为空，则将其设置为当前时间
+        if(entries.get(0).getPublishedDate()==null){
+            entries.forEach(entry -> entry.setPublishedDate(Date.from(TimeUtil.getCurrentUTCTime().toInstant(ZoneOffset.UTC)))
+            );
+        }
         if (lastestUpdateTime != null) {
             entries.removeIf(entry -> entry.getPublishedDate()!=null&&TimeUtil.convertTimestampToUTC(entry.getPublishedDate().getTime()).isBefore(lastestUpdateTime));
             entries.removeIf(entry -> entry.getPublishedDate()!=null&&TimeUtil.convertTimestampToUTC(entry.getPublishedDate().getTime()).isEqual(lastestUpdateTime));
@@ -81,8 +89,14 @@ public class RssConverter{
     private String findImageUrlInElement(Element element) {
         // 先检查当前元素是否包含图片 URL
         if ("content".equals(element.getName()) && "media".equals(element.getNamespacePrefix())) {
-            if (element.getAttributeValue("type").startsWith("image/")) {
-                return element.getAttributeValue("url");
+//            if (element.getAttributeValue("type")!=null && element.getAttributeValue("type").startsWith("image/")) {
+//                return element.getAttributeValue("url");
+//            }
+            //遍历所有attributes找到startWith image/的url
+            for (Attribute attribute : element.getAttributes()) {
+                if (attribute.getValue().startsWith("image")) {
+                    return element.getAttributeValue("url");
+                }
             }
         }
 
