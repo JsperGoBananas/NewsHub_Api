@@ -218,7 +218,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             return PageResponseResult.errorResult(AppHttpCodeEnum.DATA_NOT_EXIST);
         }else{
             return ResponseResult.okResult(assembleTimeLineData(articlePage.getRecords()));
-//            return ResponseResult.okResult(articlePage.getRecords());
         }
     }
 
