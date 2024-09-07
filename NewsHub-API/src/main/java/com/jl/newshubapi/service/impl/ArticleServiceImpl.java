@@ -138,18 +138,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             log.info(website.getTitle()+"没有新文章");
             return ;
         }
+        //从数据库中获取articleList size大小的数据
+        List<Article> list = list(new QueryWrapper<Article>().eq("source", website.getId()).orderBy(true, false, "sort_order").last("limit "+articleList.size()*2));
+        //去除重复的文章,用stream
+        articleList.removeIf(article -> list.stream().anyMatch(article1 -> article1.getTitle().equals(article.getTitle()) && article1.getLink().equals(article.getLink())));
         int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
         for (Article article : articleList) {
             article.setSource(String.valueOf(website.getId()));
             article.setSortOrder(sortOrder--);
-        }
-        //去数据库中查询是否已经存在该文章,如果存在则从list移除
-        for (int i = articleList.size() - 1; i >= 0; i--) {
-            Article article = articleList.get(i);
-            Article one = getOne(new QueryWrapper<Article>().eq("title", article.getTitle()).eq("link", article.getLink()).last("limit 1"));
-            if (one != null) {
-                articleList.remove(i);
-            }
         }
         saveOrUpdateBatch(articleList);
         log.info("更新"+website.getTitle()+"文章"+articleList.size()+"篇");
@@ -190,16 +186,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             return 0;
         }
         int sortOrder = getCurrentMaxOrder(id);
-        //去数据库中查询是否已经存在该文章,如果存在则从list移除,逆序遍历
-        for (int i = articleList.size() - 1; i >= 0; i--) {
-            Article article = articleList.get(i);
+        //从数据库中获取articleList size大小的数据
+        List<Article> list = list(new QueryWrapper<Article>().eq("source", id).orderBy(true, false, "sort_order").last("limit "+articleList.size()*2));
+        //去除重复的文章,并设置sortOrder
+        articleList.removeIf(article -> list.stream().anyMatch(article1 -> article1.getTitle().equals(article.getTitle()) && article1.getLink().equals(article.getLink())));
+        for (Article article : articleList) {
             article.setSource(String.valueOf(id));
-            Article one = getOne(new QueryWrapper<Article>().eq("title", article.getTitle()).eq("link", article.getLink()).last("limit 1"));
-            if (one != null) {
-                articleList.remove(i);
-            }else{
-                article.setSortOrder(++sortOrder);
-            }
+            article.setSortOrder(++sortOrder);
         }
         log.info("更新id:"+id+"文章"+articleList.size()+"篇");
         saveOrUpdateBatch(articleList);
