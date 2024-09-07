@@ -27,6 +27,7 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,9 +124,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public int saveOnlineArticle(String url) {
+    public void saveOnlineArticle(String url) {
         if (url == null || url.isEmpty()){
-            return 0;
+            return ;
         }
         SyndFeed feed = RSSUtil.getFeed(url);
         Website website = websiteService.getOne(new QueryWrapper<Website>().eq("fetch_data_url", url));
@@ -135,7 +136,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         List<Article> articleList = converter.convertToArticleList(feed, latestArticle == null ? null : latestArticle.getUpdatedTime());
         if (articleList == null || articleList.isEmpty()) {
             log.info(website.getTitle()+"没有新文章");
-            return 0;
+            return ;
         }
         int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
         for (Article article : articleList) {
@@ -154,7 +155,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         log.info("更新"+website.getTitle()+"文章"+articleList.size()+"篇");
         //删除redis中的数据
         redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+website.getId());
-        return articleList.size();
+//        return articleList.size();
     }
 
 

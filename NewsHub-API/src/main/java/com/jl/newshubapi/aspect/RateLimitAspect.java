@@ -32,10 +32,29 @@ public class RateLimitAspect {
     public void checkRateLimit(JoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
         //记录方法名
         String methodName = joinPoint.getSignature().getName();
+        //获取参数
+        Object[] args = joinPoint.getArgs();
+        //获取参数数量
+        int argCount = args.length;
+        //把参数拼接成[参数1,参数2,参数3]的形式
+        StringBuilder sb = new StringBuilder();
+        sb.append("[");
+        for (int i = 0; i < argCount; i++) {
+            sb.append(args[i]);
+            if (i < argCount - 1) {
+                sb.append(",");
+            }
+        }
+        sb.append("]");
+
         log.info("RateLimitAspect: {}", methodName);
         String ip = getClientIP();
         log.info("Request IP: {}", ip);
-        String key = "rate:limit:" + ip;
+        if(args == null){
+
+        }
+        //key = rate:limit:ip:methodName:args
+        String key = "rate:limit:" + ip+":"+methodName + ":" + sb;
         long currentTimeMillis = System.currentTimeMillis();
 
         // 从注解中获取限流参数
