@@ -24,6 +24,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @SpringBootTest
 class HotListApiApplicationTests {
@@ -198,6 +200,7 @@ class HotListApiApplicationTests {
     @Test
     void testGetArticleListBySource2(){
 //        System.out.println(RSSUtil.getBaseUrl("https://www.ifanr.com?utm_source=rss&utm_medium=rss&utm_campaign="));
+        //开十个线程调用这个方法
         dataImport.importData();
     }
 

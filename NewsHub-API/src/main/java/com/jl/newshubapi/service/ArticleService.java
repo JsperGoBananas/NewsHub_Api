@@ -25,7 +25,7 @@ public interface ArticleService extends IService<Article> {
     void saveOnlineArticle(Request request, Integer dataSource);
     //For RSS
 
-    void saveOnlineArticle(String url);
+    int  saveOnlineArticle(String url);
 
     ResponseResult getNewsTimeLine(NewsTimeLineDto newsTimeLineDto);
 

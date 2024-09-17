@@ -4,6 +4,8 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.google.common.hash.BloomFilter;
+import com.google.common.hash.Funnels;
 import com.jl.newshubapi.constants.enums.AppHttpCodeEnum;
 import com.jl.newshubapi.converter.DataConverter;
 import com.jl.newshubapi.converter.DataConverterFactory;
@@ -24,20 +26,22 @@ import com.jl.newshubapi.utils.RSSUtil;
 import com.jl.newshubapi.utils.RequestHandler;
 import com.jl.newshubapi.utils.TimeUtil;
 import com.rometools.rome.feed.synd.SyndFeed;
+import com.rometools.utils.Strings;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.Charset;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.jl.newshubapi.constants.ArticleConstants.ARTICLE_REDIS_KEY_PREFIX;
 
@@ -62,13 +66,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     private ArticleMapper articleMapper;
 
-    private static final ExecutorService executorService = Executors.newFixedThreadPool(10); // 线程池大小可以根据需要调整
-
-
+    @Autowired
+    private ThreadPoolTaskExecutor threadPoolTaskExecutor;
     @Override
     public ResponseResult getArticleList(String source) {
         Website websiteInfo = websiteService.getOne(new QueryWrapper<Website>().eq("id", source));
         if (websiteInfo == null) {
+            redisTemplate.opsForValue().set(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId() , null);
+            redisTemplate.expire(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), 1, TimeUnit.MINUTES);
             return ResponseResult.errorResult(AppHttpCodeEnum.WEBSITE_NOT_EXIST);
         }
         List<Article> articleList = JSON.parseArray(redisTemplate.opsForValue().get(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId()), Article.class);
@@ -85,7 +90,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     .build();
             return ResponseResult.okResult(listVos);
         } else {
-            List<Article> list = list(new QueryWrapper<Article>().eq("source", websiteInfo.getId()).orderBy(true, false, "sort_order").last("limit 50"));
+            List<Article> list = list(new QueryWrapper<Article>().eq("source", websiteInfo.getId()).orderByDesc("updated_time").orderByDesc("id").last("limit 50"));
             HotListVo listVos = HotListVo.builder()
                     .title(websiteInfo.getTitle())
                     .homepage(websiteInfo.getHomepage())
@@ -96,7 +101,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     .data(list)
                     .build();
             //开一个新线程更新Redis,key 为source和category的组合，过期时间为30分钟
-            executorService.submit(() -> {
+            threadPoolTaskExecutor.submit(() -> {
                 try {
                     redisTemplate.opsForValue().set(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId() , JSON.toJSONString(list));
                     //过期时间为1小时
@@ -124,34 +129,38 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public void saveOnlineArticle(String url) {
+    @Transactional(rollbackFor = Exception.class)
+    public int saveOnlineArticle(String url) {
         if (url == null || url.isEmpty()){
-            return ;
+            return 0;
         }
         SyndFeed feed = RSSUtil.getFeed(url);
         Website website = websiteService.getOne(new QueryWrapper<Website>().eq("fetch_data_url", url));
 
         RssConverter converter = new RssConverter();
-        Article latestArticle = getOne(new QueryWrapper<Article>().eq("source", website.getId()).orderBy(true, false, "updated_time").last("limit 1"));
-        List<Article> articleList = converter.convertToArticleList(feed, latestArticle == null ? null : latestArticle.getUpdatedTime());
+        Article latestArticle = getOne(new QueryWrapper<Article>().eq("source", website.getId()).orderByDesc("updated_time").orderByDesc("id").last("limit 1"));
+        List<Article> articleList = converter.convertToArticleList(feed, latestArticle == null ? null : latestArticle.getUpdatedTime(), String.valueOf(website.getId()));
         if (articleList == null || articleList.isEmpty()) {
             log.info(website.getTitle()+"没有新文章");
-            return ;
+            return 0;
         }
         //从数据库中获取articleList size大小的数据
-        List<Article> list = list(new QueryWrapper<Article>().eq("source", website.getId()).orderBy(true, false, "sort_order").last("limit "+articleList.size()*2));
+        List<String> list = listObjs(new QueryWrapper<Article>().select("link").eq("source", website.getId()).orderByDesc( "updated_time").orderByDesc("id").last("limit "+articleList.size()*2));
         //去除重复的文章,用stream
-        articleList.removeIf(article -> list.stream().anyMatch(article1 -> article1.getTitle().equals(article.getTitle()) && article1.getLink().equals(article.getLink())));
-        int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
-        for (Article article : articleList) {
-            article.setSource(String.valueOf(website.getId()));
-            article.setSortOrder(sortOrder--);
-        }
+        Set<String> set = new HashSet<>(list);
+        articleList = articleList.stream().filter(article -> !set.contains(article.getLink())).collect(Collectors.toList());
+//        int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
+//        for (Article article : articleList) {
+//            article.setSource(String.valueOf(website.getId()));
+////            article.setSortOrder(sortOrder--);
+//        }
         saveOrUpdateBatch(articleList);
         log.info("更新"+website.getTitle()+"文章"+articleList.size()+"篇");
         //删除redis中的数据
-        redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+website.getId());
-//        return articleList.size();
+        threadPoolTaskExecutor.submit(()->{
+            redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+website.getId());
+        });
+        return articleList.size();
     }
 
 
@@ -163,14 +172,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (website == null) {
             return ResponseResult.errorResult(AppHttpCodeEnum.WEBSITE_NOT_EXIST);
         }
-
+        int count = 0;
         if (website.getIsRss()) {
-            saveOnlineArticle(website.getFetchDataUrl());
+            count = saveOnlineArticle(website.getFetchDataUrl());
         } else {
-            saveOnlineArticle(website.getFetchDataUrl(), id);
+            count = saveOnlineArticle(website.getFetchDataUrl(), id);
         }
-
-        return ResponseResult.okResult("更新成功");
+        log.info("更新"+website.getTitle()+"文章"+count+"篇");
+        return ResponseResult.okResult("更新记录"+count+"条");
     }
 
 
@@ -185,19 +194,26 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (articleList == null || articleList.size() == 0) {
             return 0;
         }
-        int sortOrder = getCurrentMaxOrder(id);
+//        int sortOrder = getCurrentMaxOrder(id);
         //从数据库中获取articleList size大小的数据
-        List<Article> list = list(new QueryWrapper<Article>().eq("source", id).orderBy(true, false, "sort_order").last("limit "+articleList.size()*2));
-        //去除重复的文章,并设置sortOrder
-        articleList.removeIf(article -> list.stream().anyMatch(article1 -> article1.getTitle().equals(article.getTitle()) && article1.getLink().equals(article.getLink())));
+//        List<Article> list = list(new QueryWrapper<Article>().eq("source", id).orderBy(true, false, "sort_order").last("limit "+articleList.size()*2));
+//        //去除重复的文章,并设置sortOrder
+//        articleList.removeIf(article -> list.stream().anyMatch(article1 -> article1.getTitle().equals(article.getTitle()) && article1.getLink().equals(article.getLink())));
+        List<String> list = listObjs(new QueryWrapper<Article>().select("link").eq("source", id).orderBy(true, false, "updated_time,id").in("link", articleList.stream().map(Article::getLink).collect(Collectors.toList())));
+        Set<String> set = new HashSet<>(list);
+        //去除重复的文章,用stream
+        articleList = articleList.stream().filter(article -> !set.contains(article.getLink())).collect(Collectors.toList());
         for (Article article : articleList) {
             article.setSource(String.valueOf(id));
-            article.setSortOrder(++sortOrder);
+//            article.setSortOrder(++sortOrder);
         }
         log.info("更新id:"+id+"文章"+articleList.size()+"篇");
         saveOrUpdateBatch(articleList);
-        //删除redis中的数据
-        redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+id);
+
+        threadPoolTaskExecutor.submit(()->{
+            //删除redis中的数据
+            redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+id);
+        });
         return articleList.size();
 
     }
@@ -251,10 +267,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
 
 
-    private int getCurrentMaxOrder(Integer id){
-        Article one = getOne(new QueryWrapper<Article>().select("sort_order").eq("source", id).orderBy(true, false, "sort_order").last("limit 1"));
-        return one == null ? 0 : one.getSortOrder();
-    }
+//    private int getCurrentMaxOrder(Integer id){
+//        Article one = getOne(new QueryWrapper<Article>().select("sort_order").eq("source", id).orderBy(true, false, "sort_order").last("limit 1"));
+//        return one == null ? 0 : one.getSortOrder();
+//    }
 
 
 }

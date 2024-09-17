@@ -14,7 +14,15 @@ import com.rometools.rome.feed.synd.SyndFeed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static com.jl.newshubapi.constants.enums.AppHttpCodeEnum.WEBSITE_EXISTED;
 
@@ -36,17 +44,27 @@ public class WebsiteServiceImpl extends ServiceImpl<WebsiteMapper, Website> impl
     @Autowired
     private StringRedisTemplate redisTemplate;
     //获取数据库中所有website列表包装成json返回
+
+    //创建一个线程池
+    @Autowired
+    private ThreadPoolTaskExecutor threadPoolTaskExecutor;
+
+
     @Override
     public ResponseResult getWebsiteList() {
         //如果在redis中有数据，直接返回
         String websiteListJson = redisTemplate.opsForValue().get("website_list");
         if (websiteListJson != null) {
-            return ResponseResult.okResult(websiteListJson);
+            return ResponseResult.okResult(JSON.parseArray(websiteListJson, Website.class));
         }
-        return ResponseResult.okResult(baseMapper.selectList(new QueryWrapper<Website>().eq("is_show", true)));
+        List<Website> website = baseMapper.selectList(new QueryWrapper<Website>().eq("is_show", true));
+
+        redisTemplate.opsForValue().set("website_list", JSON.toJSONString(website), 1, TimeUnit.HOURS);
+        return ResponseResult.okResult(website);
     }
 
     @Override
+    @Transactional
     public ResponseResult addWebsite(String fetchDataUrl) {
 
 
@@ -70,17 +88,21 @@ public class WebsiteServiceImpl extends ServiceImpl<WebsiteMapper, Website> impl
         website.setTitle(feed.getTitle());
         website.setIsRss(true);
         baseMapper.insert(website);
-        articleService.saveOnlineArticle(fetchDataUrl);
-        //重新将完整网站列表存入redis
-        redisTemplate.opsForValue().set("website_list", JSON.toJSONString(baseMapper.selectList(new QueryWrapper<Website>().eq("is_show", true))));
+        threadPoolTaskExecutor.submit(() ->{
+            articleService.saveOnlineArticle(fetchDataUrl);
+            //删除
+            redisTemplate.delete("website_list");
+        });
         return ResponseResult.okResult(website);
     }
 
     @Override
     public ResponseResult removeWebsite(Integer id) {
         baseMapper.update(new UpdateWrapper<Website>().eq("id", id).set("is_show",false) );
-        //重新将完整网站列表存入redis
-        redisTemplate.opsForValue().set("website_list", JSON.toJSONString(baseMapper.selectList(new QueryWrapper<Website>().eq("is_show", true))));
+        //删除redis
+        threadPoolTaskExecutor.submit(() ->{
+            redisTemplate.delete("website_list");
+        });
         return ResponseResult.okResult("取消订阅成功");
     }
 }

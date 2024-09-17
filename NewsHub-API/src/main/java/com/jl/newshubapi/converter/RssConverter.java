@@ -16,7 +16,7 @@ import java.util.List;
 
 public class RssConverter{
 
-    public List<Article> convertToArticleList(SyndFeed feed, LocalDateTime lastestUpdateTime) {
+    public List<Article> convertToArticleList(SyndFeed feed, LocalDateTime lastestUpdateTime,String source) {
         // 获取所有内容项
         List<Article> articles = new ArrayList<>();
         List<SyndEntry> entries = feed.getEntries();
@@ -44,6 +44,10 @@ public class RssConverter{
                 String descriptionWithoutImg = entry.getDescription().getValue().replaceAll("<img[^>]*>", "").replaceAll("<a[^>]*>.*?</a>", "");
                 article.setDescription(descriptionWithoutImg);
             }
+            if(article.getTitle() == null && article.getDescription() != null){
+                article.setTitle(article.getDescription().substring(0, Math.min(article.getDescription().length(), 50)));
+            }
+            article.setSource(source);
             articles.add(article);
         }
         return articles;

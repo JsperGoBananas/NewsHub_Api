@@ -72,7 +72,9 @@ public class RSSUtil {
         // 获取网站主页的 HTML 内容
         Document doc = null;
         try {
-            doc = Jsoup.connect(url).get();
+            //加上User-Agent，否则有些网站会拒绝访问
+//            doc = Jsoup.connect(url).get();
+            doc = Jsoup.connect(url).userAgent("Mozilla").get();
         } catch (IOException e) {
             log.error("无法获取"+url+"主页", e);
             return url+"/favicon.ico";
@@ -86,6 +88,7 @@ public class RSSUtil {
 
         // 遍历所有找到的图标链接
         for (Element link : iconLinks) {
+            log.info("找到图标链接：" + link);
             String href = link.attr("href");
             String sizes = link.attr("sizes");
 
@@ -93,7 +96,7 @@ public class RSSUtil {
             int size = parseSize(sizes);
 
             // 选择尺寸最大的图标
-            if (size > bestSize) {
+            if (size >= bestSize) {
                 bestSize = size;
                 bestIconUrl = href;
             }
@@ -101,14 +104,18 @@ public class RSSUtil {
 
         // 如果找不到图标，则使用默认的 /favicon.ico 路径
         if (bestIconUrl == null) {
+            log.info("无法找到图标链接，使用默认的 /favicon.ico 路径");
             bestIconUrl = url + "/favicon.ico";
         } else {
+            if (bestIconUrl.startsWith("//")) {
+                bestIconUrl = "https:" + bestIconUrl;
+            }
             // 如果图标链接是相对路径，将其转换为绝对路径
-            if (!bestIconUrl.startsWith("http")) {
+            else if (!bestIconUrl.startsWith("http") ) {
                 bestIconUrl = url + bestIconUrl;
             }
         }
-
+        log.info("找到最佳图标链接：" + bestIconUrl);
         return bestIconUrl;
     }
 

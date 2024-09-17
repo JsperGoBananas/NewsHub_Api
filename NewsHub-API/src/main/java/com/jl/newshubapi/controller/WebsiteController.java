@@ -24,7 +24,7 @@ public class WebsiteController {
     public ResponseResult list() {
         return websiteService.getWebsiteList();
     }
-    @RateLimit(requests = 100, windowSeconds = 60)
+    @RateLimit(requests = 1, windowSeconds = 60)
     @PostMapping("/add")
     public ResponseResult add(@RequestParam("fetchDataUrl") String fetchDataUrl) {
         return websiteService.addWebsite(fetchDataUrl);

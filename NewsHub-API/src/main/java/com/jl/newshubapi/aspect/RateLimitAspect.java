@@ -62,8 +62,6 @@ public class RateLimitAspect {
         int windowSeconds = rateLimit.windowSeconds();
         long windowMillis = windowSeconds * 1000L;
 
-        // 添加当前时间戳
-        redisTemplate.opsForZSet().add(key, String.valueOf(currentTimeMillis), currentTimeMillis);
 
         // 移除过期的请求记录
         long windowStart = currentTimeMillis - windowMillis;
@@ -75,8 +73,11 @@ public class RateLimitAspect {
         // 设置过期时间
         redisTemplate.expire(key, windowSeconds, TimeUnit.SECONDS);
 
-        if (requestCount != null && requestCount > requests) {
+        if (requestCount != null && requestCount+1 > requests) {
             throw new RuntimeException("Rate limit exceeded");
+        }else{
+            // 添加当前时间戳
+            redisTemplate.opsForZSet().add(key, String.valueOf(currentTimeMillis), currentTimeMillis);
         }
     }
 
