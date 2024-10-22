@@ -30,4 +30,8 @@ public class TimeUtil {
         return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
     }
 
+    public static String get12HoursAgoTime(){
+        return LocalDateTime.now().minusHours(12).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+
 }

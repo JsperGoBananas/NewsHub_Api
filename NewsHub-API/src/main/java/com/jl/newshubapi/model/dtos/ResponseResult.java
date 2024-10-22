@@ -48,6 +48,7 @@ public class ResponseResult<T> implements Serializable {
 
     public static ResponseResult okResult(int code, String msg) {
         ResponseResult result = new ResponseResult();
+
         return result.ok(code, null, msg);
     }
 
@@ -133,6 +134,8 @@ public class ResponseResult<T> implements Serializable {
 
 
     public static void main(String[] args) {
+
+
         //前置
         /*AppHttpCodeEnum success = AppHttpCodeEnum.SUCCESS;
         System.out.println(success.getCode());

@@ -1,6 +1,7 @@
 package com.jl.newshubapi.controller;
 
 
+import com.jl.newshubapi.annotation.Ignore;
 import com.jl.newshubapi.annotation.RateLimit;
 import com.jl.newshubapi.model.dtos.NewsTimeLineDto;
 import com.jl.newshubapi.model.dtos.ResponseResult;
@@ -20,8 +21,8 @@ public class HotListController {
     ArticleService articleService;
     @RateLimit(requests = 100, windowSeconds = 60)
     @GetMapping("/{source}")
-    public ResponseResult getHotList(@PathVariable("source") String source) {
-        return articleService.getArticleList(source);
+    public ResponseResult getHotList(@PathVariable("source") String source , @Ignore  @RequestParam( name = "page",defaultValue = "1") int page, @Ignore @RequestParam(name = "size",defaultValue = "10") int size) {
+        return articleService.getArticleList(source,page,size);
     }
     @RateLimit(requests = 100, windowSeconds = 60)
     @PostMapping("/timeline")

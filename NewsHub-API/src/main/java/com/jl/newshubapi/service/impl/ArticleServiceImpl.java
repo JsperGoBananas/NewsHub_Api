@@ -4,8 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.google.common.hash.BloomFilter;
-import com.google.common.hash.Funnels;
 import com.jl.newshubapi.constants.enums.AppHttpCodeEnum;
 import com.jl.newshubapi.converter.DataConverter;
 import com.jl.newshubapi.converter.DataConverterFactory;
@@ -23,26 +21,24 @@ import com.jl.newshubapi.model.entity.Website;
 import com.jl.newshubapi.service.ArticleService;
 import com.jl.newshubapi.service.IWebsiteService;
 import com.jl.newshubapi.utils.RSSUtil;
-import com.jl.newshubapi.utils.RequestHandler;
+import com.jl.newshubapi.utils.RequestUtil;
 import com.jl.newshubapi.utils.TimeUtil;
 import com.rometools.rome.feed.synd.SyndFeed;
-import com.rometools.utils.Strings;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.nio.charset.Charset;
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.jl.newshubapi.constants.ArticleConstants.ARTICLE_REDIS_COUNT_KEY_PREFIX;
 import static com.jl.newshubapi.constants.ArticleConstants.ARTICLE_REDIS_KEY_PREFIX;
 
 /**
@@ -68,62 +64,79 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Autowired
     private ThreadPoolTaskExecutor threadPoolTaskExecutor;
+
+
+
+
     @Override
-    public ResponseResult getArticleList(String source) {
+    public ResponseResult getArticleList(String source,int page, int size) {
+
+
         Website websiteInfo = websiteService.getOne(new QueryWrapper<Website>().eq("id", source));
         if (websiteInfo == null) {
             redisTemplate.opsForValue().set(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId() , null);
             redisTemplate.expire(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), 1, TimeUnit.MINUTES);
             return ResponseResult.errorResult(AppHttpCodeEnum.WEBSITE_NOT_EXIST);
         }
-        List<Article> articleList = JSON.parseArray(redisTemplate.opsForValue().get(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId()), Article.class);
-        if (articleList != null && articleList.size() > 0) {
+//        List<Article> articleList = JSON.parseArray(redisTemplate.opsForValue().get(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId()), Article.class);
+        if (page <= 5 && redisTemplate.hasKey(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId())) {
+            List<Article> articleList = redisTemplate.opsForList().range(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), (page - 1) * size, page * size - 1).stream().map(s -> JSON.parseObject(s, Article.class)).collect(Collectors.toList());
+
             log.debug("从Redis中获取数据");
-            HotListVo listVos = HotListVo.builder()
-                    .title(websiteInfo.getTitle())
-                    .homepage(websiteInfo.getHomepage())
-                    .iconUrl(websiteInfo.getIconUrl())
-                    .total(articleList.size())
-                    .category(websiteInfo.getCategoryName())
-                    .updateTime(articleList.get(0).getUpdatedTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
-                    .data(articleList)
-                    .build();
+            System.out.println("从Redis中获取数据");
+            HotListVo listVos = buildHotListVo(websiteInfo, articleList,redisTemplate.opsForValue().get(ARTICLE_REDIS_COUNT_KEY_PREFIX + websiteInfo.getId()) == null ? 0 : Integer.parseInt(redisTemplate.opsForValue().get(ARTICLE_REDIS_COUNT_KEY_PREFIX + websiteInfo.getId())));
             return ResponseResult.okResult(listVos);
+
+
         } else {
-            List<Article> list = list(new QueryWrapper<Article>().eq("source", websiteInfo.getId()).orderByDesc("updated_time").orderByDesc("id").last("limit 50"));
-            HotListVo listVos = HotListVo.builder()
-                    .title(websiteInfo.getTitle())
-                    .homepage(websiteInfo.getHomepage())
-                    .iconUrl(websiteInfo.getIconUrl())
-                    .total(list.size())
-                    .category(websiteInfo.getCategoryName())
-                    .updateTime(list.size() == 0 ? TimeUtil.getCurrentUTCTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) : list.get(0).getUpdatedTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
-                    .data(list)
-                    .build();
+            System.out.println("从数据库中获取数据");
+            Page<Article> list = page(new Page<>(page, size), new QueryWrapper<Article>().eq("source", source).orderByDesc("updated_time").orderByDesc("id"));
+//            List<Article> list = list(new QueryWrapper<Article>().eq("source", websiteInfo.getId()).orderByDesc("updated_time").orderByDesc("id").last("limit 50"));
+            HotListVo listVos = buildHotListVo(websiteInfo, list.getRecords(), (int) list.getTotal());
             //开一个新线程更新Redis,key 为source和category的组合，过期时间为30分钟
             threadPoolTaskExecutor.submit(() -> {
                 try {
-                    redisTemplate.opsForValue().set(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId() , JSON.toJSONString(list));
-                    //过期时间为1小时
-                    redisTemplate.expire(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), 30, TimeUnit.MINUTES);
+                    if (!redisTemplate.hasKey(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId())) {
+                        List<Article> first100Articles = getFirst100Articles(source);
+                        redisTemplate.opsForList().rightPushAll(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), first100Articles.stream().map(JSON::toJSONString).collect(Collectors.toList()));
+                        //过期时间为30分钟
+                        redisTemplate.expire(ARTICLE_REDIS_KEY_PREFIX + websiteInfo.getId(), 30, TimeUnit.MINUTES);
+                        redisTemplate.opsForValue().set(ARTICLE_REDIS_COUNT_KEY_PREFIX + websiteInfo.getId(), String.valueOf(list.getTotal()));
+                    }
+
                 } catch (Exception e) {
                     log.error("更新Redis时出错", e);
                 }
             });
-
             return ResponseResult.okResult(listVos);
         }
     }
 
+    private List<Article> getFirst100Articles(String source) {
+        return list(new QueryWrapper<Article>().eq("source", source).orderByDesc("updated_time").last("limit 100"));
+    }
+
+    private HotListVo buildHotListVo(Website websiteInfo, List<Article> articleList,int size) {
+        return HotListVo.builder()
+                .title(websiteInfo.getTitle())
+                .homepage(websiteInfo.getHomepage())
+                .iconUrl(websiteInfo.getIconUrl())
+                .total(size)
+                .category(websiteInfo.getCategoryName())
+                .updateTime(articleList.get(0).getUpdatedTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                .data(articleList)
+                .build();
+    }
+
     @Override
     public void saveOnlineArticle(Request request, Integer dataSource) {
-        String data = RequestHandler.post(request);
+        String data = RequestUtil.post(request);
         convertAndSave(data,dataSource);
     }
 
     @Override
     public int saveOnlineArticle(String url, Integer dataSource) {
-        String data = RequestHandler.get(url);
+        String data = RequestUtil.get(url);
         return convertAndSave(data,dataSource);
 
     }
@@ -149,11 +162,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         //去除重复的文章,用stream
         Set<String> set = new HashSet<>(list);
         articleList = articleList.stream().filter(article -> !set.contains(article.getLink())).collect(Collectors.toList());
-//        int sortOrder = getCurrentMaxOrder(website.getId())+articleList.size()+1;
-//        for (Article article : articleList) {
-//            article.setSource(String.valueOf(website.getId()));
-////            article.setSortOrder(sortOrder--);
-//        }
         saveOrUpdateBatch(articleList);
         log.info("更新"+website.getTitle()+"文章"+articleList.size()+"篇");
         //删除redis中的数据
@@ -161,9 +169,15 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             redisTemplate.delete(ARTICLE_REDIS_KEY_PREFIX+website.getId());
         });
         return articleList.size();
+
     }
 
+//    @KafkaListener(topics = "test" )
+//    public void testConsumer(String message) {
+//        //TODO
+//        System.out.println(message);
 
+//    }
 
 
     @Override
@@ -218,7 +232,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     }
 
-    //Get news timeline, filter by sources order by updated_time
+
+    /***
+     * 获取时间线
+     * @param newsTimeLineDto
+     * @return ResponseResult
+     */
     @Override
     public ResponseResult getNewsTimeLine(NewsTimeLineDto newsTimeLineDto) {
         String[] sources = newsTimeLineDto.getSources();
@@ -265,12 +284,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return  newsListDtos;
     }
 
+//    BigDecimal
 
-
-//    private int getCurrentMaxOrder(Integer id){
-//        Article one = getOne(new QueryWrapper<Article>().select("sort_order").eq("source", id).orderBy(true, false, "sort_order").last("limit 1"));
-//        return one == null ? 0 : one.getSortOrder();
-//    }
-
-
+    // get the last 12 hours articles from the same source
+    @Override
+    public List<Article> getLast12HoursArticles(Integer id) {
+        return articleMapper.selectList(new QueryWrapper<Article>().eq("source", id).ge("updated_time", TimeUtil.get12HoursAgoTime()));
+    }
 }

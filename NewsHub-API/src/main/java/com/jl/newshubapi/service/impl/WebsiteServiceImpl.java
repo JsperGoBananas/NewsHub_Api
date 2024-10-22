@@ -105,4 +105,9 @@ public class WebsiteServiceImpl extends ServiceImpl<WebsiteMapper, Website> impl
         });
         return ResponseResult.okResult("取消订阅成功");
     }
+
+    @Override
+    public List<Integer> getWebsiteIdList() {
+        return baseMapper.selectList(new QueryWrapper<Website>().eq("is_show", true)).stream().map(Website::getId).toList();
+    }
 }

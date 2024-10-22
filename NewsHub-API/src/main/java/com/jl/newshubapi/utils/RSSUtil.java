@@ -12,19 +12,29 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 
 @Slf4j
 public class RSSUtil {
 
+    /***
+     * 获取RSS源
+     * @param url
+     * @return SyndFeed
+     */
     public static SyndFeed getFeed(String url){
 
         try {
-            URL feedUrl = null;
-            feedUrl = new URL(url);
+            URL feedUrl = new URL(url);
+            HttpURLConnection connection = (HttpURLConnection) feedUrl.openConnection();
+            connection.setConnectTimeout(5000); // 设置连接超时 5 秒
+            connection.setReadTimeout(5000); // 设置读取超时 5 秒
+
             SyndFeedInput input = new SyndFeedInput();
-            SyndFeed feed = input.build(new XmlReader(feedUrl));
+            SyndFeed feed = input.build(new XmlReader(connection.getInputStream()));
             return feed;
         } catch (MalformedURLException e) {
             log.error("URL格式错误", e);
@@ -34,11 +44,16 @@ public class RSSUtil {
             return null;
         } catch (IOException e) {
             log.error("IO错误", e);
-            return null;
+            throw new RuntimeException("无法获取RSS源,请稍后再试");
         }
 
     }
 
+    /***
+     * 获取网站信息
+     * @param feed
+     * @return Website
+     */
     public static Website getWebsiteInfo(SyndFeed feed){
         Website website = new Website();
         website.setTitle(feed.getTitle());
@@ -73,8 +88,8 @@ public class RSSUtil {
         Document doc = null;
         try {
             //加上User-Agent，否则有些网站会拒绝访问
-//            doc = Jsoup.connect(url).get();
-            doc = Jsoup.connect(url).userAgent("Mozilla").get();
+            doc = Jsoup.connect(url).get();
+//            doc = Jsoup.connect(url).userAgent("Mozilla").get();
         } catch (IOException e) {
             log.error("无法获取"+url+"主页", e);
             return url+"/favicon.ico";

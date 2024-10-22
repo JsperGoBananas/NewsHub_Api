@@ -1,6 +1,8 @@
 package com.jl.newshubapi.utils;
 
 
+import com.alibaba.fastjson.JSON;
+import com.jl.newshubapi.model.entity.RequestModel;
 import com.jl.newshubapi.model.requests.Request;
 import com.jl.newshubapi.model.entity.Tuple;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +17,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -26,17 +29,21 @@ import java.nio.charset.Charset;
 public class RequestUtil {
 
     public static final int REFRESH_TIME = 30;
-    @Autowired
-    StringRedisTemplate redisTemplate;
 
 
-    private static final RequestConfig requestConfig = RequestConfig.custom()
-            .setConnectTimeout(5000)
-            .setConnectionRequestTimeout(1000)
-            .setSocketTimeout(5000)
-            .build();
-    private static final CloseableHttpClient client = HttpClientBuilder.create().setMaxConnTotal(10).setDefaultRequestConfig(requestConfig).build();
 
+
+    private static final CloseableHttpClient client = getHttpClient();
+
+    public static CloseableHttpClient getHttpClient() {
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(50000)
+                .setConnectionRequestTimeout(1000)
+                .setSocketTimeout(50000)
+                .build();
+        CloseableHttpClient client = HttpClientBuilder.create().setMaxConnTotal(10).setDefaultRequestConfig(requestConfig).build();
+        return client;
+    }
     public static String get(String url) {
         try {
             HttpGet httpGet = new HttpGet(url);
@@ -88,6 +95,8 @@ public class RequestUtil {
             throw new RuntimeException("Failed to send POST request to " + request.getUrl());
         }
     }
+
+
 
 }
 

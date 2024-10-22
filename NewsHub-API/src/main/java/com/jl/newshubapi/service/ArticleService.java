@@ -6,6 +6,8 @@ import com.jl.newshubapi.model.dtos.NewsTimeLineDto;
 import com.jl.newshubapi.model.dtos.ResponseResult;
 import com.jl.newshubapi.model.entity.Article;
 
+import java.util.List;
+
 /**
  * <p>
  * 文章列表 服务类
@@ -18,7 +20,7 @@ public interface ArticleService extends IService<Article> {
 //    ResponseResult getArticleList(DataSource source, WebsiteInfoEnum websiteInfoEnum);
 
 
-    ResponseResult getArticleList(String source);
+    ResponseResult getArticleList(String source,int page,int size);
 
     int saveOnlineArticle(String url, Integer datasourceId);
 
@@ -30,4 +32,6 @@ public interface ArticleService extends IService<Article> {
     ResponseResult getNewsTimeLine(NewsTimeLineDto newsTimeLineDto);
 
     ResponseResult fetchNewArticles(Integer id);
+
+    List<Article> getLast12HoursArticles(Integer id);
 }

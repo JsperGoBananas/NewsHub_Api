@@ -1,5 +1,6 @@
 package com.jl.newshubapi.aspect;
 
+import com.jl.newshubapi.annotation.Ignore;
 import com.jl.newshubapi.annotation.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -7,11 +8,14 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.annotation.Pointcut;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 
 @Aspect
@@ -30,31 +34,44 @@ public class RateLimitAspect {
 
     @Before("rateLimitPointcut(rateLimit)")
     public void checkRateLimit(JoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
-        //记录方法名
         String methodName = joinPoint.getSignature().getName();
-        //获取参数
+
+// 获取参数和参数注解
+        MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();
+        Method method = methodSignature.getMethod();
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         Object[] args = joinPoint.getArgs();
-        //获取参数数量
         int argCount = args.length;
-        //把参数拼接成[参数1,参数2,参数3]的形式
+
+// 拼接参数，忽略带有 @IgnoreParam 注解的参数
         StringBuilder sb = new StringBuilder();
         sb.append("[");
         for (int i = 0; i < argCount; i++) {
-            sb.append(args[i]);
-            if (i < argCount - 1) {
-                sb.append(",");
+            boolean isIgnored = false;
+
+            // 遍历每个参数的注解，判断是否有 @IgnoreParam
+            for (Annotation annotation : parameterAnnotations[i]) {
+                if (annotation instanceof Ignore) {
+                    isIgnored = true;
+                    break;
+                }
+            }
+
+            // 如果该参数没有被标记为 @IgnoreParam，则将其添加到 key 中
+            if (!isIgnored) {
+                sb.append(args[i]);
+                    sb.append(",");
             }
         }
+        sb.deleteCharAt(sb.length() - 1);
         sb.append("]");
 
         log.info("RateLimitAspect: {}", methodName);
         String ip = getClientIP();
         log.info("Request IP: {}", ip);
-        if(args == null){
 
-        }
-        //key = rate:limit:ip:methodName:args
-        String key = "rate:limit:" + ip+":"+methodName + ":" + sb;
+// 拼接最终的 key
+        String key = "rate:limit:" + ip + ":" + methodName + ":" + sb;
         long currentTimeMillis = System.currentTimeMillis();
 
         // 从注解中获取限流参数

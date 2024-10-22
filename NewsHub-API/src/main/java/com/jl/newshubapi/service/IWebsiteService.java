@@ -4,6 +4,8 @@ import com.jl.newshubapi.model.entity.Website;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.jl.newshubapi.model.dtos.ResponseResult;
 
+import java.util.List;
+
 /**
  * <p>
  * 网站表，维护目前所有网站 服务类
@@ -19,4 +21,6 @@ public interface IWebsiteService extends IService<Website> {
     ResponseResult addWebsite(String fetchDataUrl);
 
     ResponseResult removeWebsite(Integer fetchDataUrl);
+
+    List<Integer> getWebsiteIdList();
 }

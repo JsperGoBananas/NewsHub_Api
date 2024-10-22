@@ -42,4 +42,6 @@ public class ArticleConstants {
     public static final String RSS_PREFIX = "rss_";
 
     public static final String ARTICLE_REDIS_KEY_PREFIX = "article:";
+
+    public static final String ARTICLE_REDIS_COUNT_KEY_PREFIX = "article:count:";
 }

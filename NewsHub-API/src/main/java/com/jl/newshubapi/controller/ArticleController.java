@@ -1,6 +1,7 @@
 package com.jl.newshubapi.controller;
 
 
+import com.jl.newshubapi.model.dtos.ResponseResult;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/article")
 public class ArticleController {
+
+    public ResponseResult setFavorite() {
+        return null;
+    }
 
 }
 
