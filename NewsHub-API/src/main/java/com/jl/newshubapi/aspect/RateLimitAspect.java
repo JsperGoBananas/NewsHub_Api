@@ -30,7 +30,8 @@ public class RateLimitAspect {
     private HttpServletRequest request;
 
     @Pointcut("@annotation(rateLimit)")
-    public void rateLimitPointcut(RateLimit rateLimit) {}
+    public void rateLimitPointcut(RateLimit rateLimit) {
+    }
 
     @Before("rateLimitPointcut(rateLimit)")
     public void checkRateLimit(JoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
@@ -60,7 +61,7 @@ public class RateLimitAspect {
             // 如果该参数没有被标记为 @IgnoreParam，则将其添加到 key 中
             if (!isIgnored) {
                 sb.append(args[i]);
-                    sb.append(",");
+                sb.append(",");
             }
         }
         sb.deleteCharAt(sb.length() - 1);
@@ -90,9 +91,9 @@ public class RateLimitAspect {
         // 设置过期时间
         redisTemplate.expire(key, windowSeconds, TimeUnit.SECONDS);
 
-        if (requestCount != null && requestCount+1 > requests) {
+        if (requestCount != null && requestCount + 1 > requests) {
             throw new RuntimeException("Rate limit exceeded");
-        }else{
+        } else {
             // 添加当前时间戳
             redisTemplate.opsForZSet().add(key, String.valueOf(currentTimeMillis), currentTimeMillis);
         }

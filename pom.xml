@@ -10,6 +10,7 @@
     <description>NewsHubApi</description>
     <modules>
         <module>NewsHub-API</module>
+        <module>NewsHub-Data</module>
     </modules>
     <properties>
         <java.version>17</java.version>

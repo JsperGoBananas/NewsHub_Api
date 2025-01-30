@@ -19,5 +19,11 @@ public interface IAiSummaryService extends IService<AiSummary> {
 
     ResponseResult getSummary(Integer id);
 
-    String getAISummary(Integer source);
+    String getAISummary(ContentData data);
+
+    ContentData buildContent(String url);
+
+    ContentData buildContent(Integer id);
+
+
 }

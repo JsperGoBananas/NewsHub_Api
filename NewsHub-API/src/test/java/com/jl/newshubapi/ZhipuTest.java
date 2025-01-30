@@ -7,10 +7,13 @@ import com.jl.newshubapi.service.IAiSummaryService;
 import com.jl.newshubapi.service.impl.AiSummaryServiceImpl;
 import com.jl.newshubapi.utils.RequestUtil;
 import com.jl.newshubapi.utils.TimeUtil;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -83,20 +86,42 @@ public class ZhipuTest {
         contentData.setContents(contents);
 
 
-        String aiSummaryResult = aiSummaryService.getAISummary(1);
-        System.out.println(aiSummaryResult);
-        String result = JSON.parseObject(aiSummaryResult).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
+//        String aiSummaryResult = aiSummaryService.getAISummary(1);
 //        System.out.println(aiSummaryResult);
-        System.out.println();
-        AiSummary aiSummary = new AiSummary();
-        aiSummary.setGeneratedTime(TimeUtil.getCurrentUTCTime());
-        aiSummary.setSummaryContent(result);
-        aiSummary.setSource(1);
-        iAiSummaryService.save(aiSummary)   ;
+//        String result = JSON.parseObject(aiSummaryResult).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
+////        System.out.println(aiSummaryResult);
+//        System.out.println();
+//        AiSummary aiSummary = new AiSummary();
+//        aiSummary.setGeneratedTime(TimeUtil.getCurrentUTCTime());
+//        aiSummary.setSummaryContent(result);
+//        aiSummary.setSource(1);
+//        iAiSummaryService.save(aiSummary)   ;
     }
 
     @Test
     public void testget12HoursArticles() {
 
+    }
+
+    @Test
+    public void testJsoupScrapeWebsite() throws IOException {
+        String url = "https://www.bbc.com/news/articles/c9qjy4lzqn3o";
+        List<String> urls = new ArrayList<>();
+        urls.add(url);
+//        urls.add("https://www.bbc.com/news/videos/czxky4xvg6no");
+//        urls.add("https://www.bbc.com/news/articles/cj482l0kw7qo");
+//        urls.add("https://www.bbc.com/news/articles/cpwx7qeeyleo");
+//        urls.add("https://www.bbc.com/news/articles/c2l0krlpdl2o");
+        for (String u : urls) {
+            Document doc = Jsoup.connect(u).userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Referer", "https://www.bloomberg.com/")
+                    .header("Connection", "keep-alive")
+                    .ignoreContentType(true)  // 允许获取非HTML内容
+                    .timeout(10000).get();
+
+            System.out.println(doc.text());
+        }
     }
 }

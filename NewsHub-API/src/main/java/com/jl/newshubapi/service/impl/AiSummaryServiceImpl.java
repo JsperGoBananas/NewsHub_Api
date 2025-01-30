@@ -18,6 +18,8 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -46,7 +48,7 @@ public class AiSummaryServiceImpl extends ServiceImpl<AiSummaryMapper, AiSummary
     @Autowired
     private ArticleService articleService;
 
-    private final String prompt = "用中文总结并按类型和重要性生成一篇摘要 返回HTML格式: ";
+    private final String prompt = "用中文总结并按类型和重要性生成摘要 按照JSON格式,只返回compact json给我 不要有json字样 {abstract:XXX,summaries: [{category:xxx,content:xxx},{category:xxx,content:xxx}]}:";
 
     private final CloseableHttpClient client = RequestUtil.getHttpClient();
     @Override
@@ -60,25 +62,27 @@ public class AiSummaryServiceImpl extends ServiceImpl<AiSummaryMapper, AiSummary
 
 
     @Override
-    public String getAISummary(Integer source) {
+    public String getAISummary(ContentData contentData) {
         HttpPost httpPost = new HttpPost(geminiUrl);
         httpPost.setHeader("Content-Type", "application/json");
         //添加参数 key 为 geminiKey
         httpPost.setHeader("key", geminiKey);
-        ContentData model = buildContent(source);
 
-        if (model == null) {
+        if (contentData == null) {
             return null;
         }
-        httpPost.setEntity(new StringEntity(JSON.toJSONString(model), "UTF-8"));
+        httpPost.setEntity(new StringEntity(JSON.toJSONString(contentData), "UTF-8"));
         try (CloseableHttpResponse response = client.execute(httpPost)) {
             HttpEntity entity = response.getEntity();
             if (entity != null) {
                 byte[] responseBytes = EntityUtils.toByteArray(entity);
                 String decodedResponse = new String(responseBytes, Charset.forName("UTF-8"));
+                if(decodedResponse.contains("error")){
+                    log.error("Failed to generate summary: " + decodedResponse);
+                    return "目前无法生成摘要";
+                }
                 String result = JSON.parseObject(decodedResponse).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text");
                 return result;
-
             } else {
                 return null;
             }
@@ -89,7 +93,8 @@ public class AiSummaryServiceImpl extends ServiceImpl<AiSummaryMapper, AiSummary
     }
 
 
-    private ContentData buildContent(Integer source){
+    @Override
+    public ContentData buildContent(Integer source){
         ContentData contentData = new ContentData();
 
         // 创建 ContentPart 实例
@@ -117,4 +122,45 @@ public class AiSummaryServiceImpl extends ServiceImpl<AiSummaryMapper, AiSummary
         contentData.setContents(contents);
         return contentData;
     }
+
+    @Override
+    public ContentData buildContent(String url){
+        ContentData contentData = new ContentData();
+        String prompt = "请用中文总结以下内容:";
+        // 创建 ContentPart 实例
+        ContentData.ContentPart contentPart = new ContentData.ContentPart();
+
+        // 创建 Part 实例，并设置内容
+        ContentData.Part part = new ContentData.Part();
+        String collect = scrapteWebSite(url);
+        if(collect == null){
+            return null;
+        }else{
+            part.setText(prompt+ collect);
+        }
+
+        // 将 Part 实例加入到 ContentPart 的 parts 列表
+        List<ContentData.Part> parts = new ArrayList<>();
+        parts.add(part);
+        contentPart.setParts(parts);
+
+        // 将 ContentPart 实例加入到 ContentData 的 contents 列表
+        List<ContentData.ContentPart> contents = new ArrayList<>();
+        contents.add(contentPart);
+        contentData.setContents(contents);
+        return contentData;
+    }
+
+
+    public String scrapteWebSite(String url) {
+        try {
+            Document document = Jsoup.connect(url).userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 Edg/132.0.0.0").header("Cookie","exp_pref=AMER; country_code=US").get();
+            return document.text();
+        }catch (Exception e){
+            log.error("Failed to scrape website",e);
+        }
+        return null;
+    }
+
+
 }

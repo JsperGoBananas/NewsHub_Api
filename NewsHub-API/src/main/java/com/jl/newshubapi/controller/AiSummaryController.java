@@ -3,11 +3,8 @@ package com.jl.newshubapi.controller;
 import com.jl.newshubapi.model.dtos.ResponseResult;
 import com.jl.newshubapi.service.IAiSummaryService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.RestController;
 
 /**
  * <p>
@@ -23,10 +20,18 @@ public class AiSummaryController {
     @Autowired
     IAiSummaryService aiSummaryService;
 
-    @GetMapping("/getSummary")
+    @GetMapping("/getSummary/{id}")
     public ResponseResult getSummary(@PathVariable("id") Integer id) {
         return aiSummaryService.getSummary(id);
     }
 
+    @GetMapping("test")
+    public String test() {
+        return "test";
+    }
 
+    @PostMapping("/getAISummary")
+    public String getAISummary(@RequestParam("url") String url) {
+        return aiSummaryService.getAISummary(aiSummaryService.buildContent(url));
+    }
 }

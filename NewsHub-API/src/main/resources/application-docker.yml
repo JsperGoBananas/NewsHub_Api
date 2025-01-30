@@ -21,3 +21,8 @@ mybatis:
 mybatis-plus:
   configuration:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+
+gemini:
+  key: AIzaSyAXjD-Qbsk1BCdvhk0JpZJ1psKObL8KNAk
+  url: https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=AIzaSyAXjD-Qbsk1BCdvhk0JpZJ1psKObL8KNAk

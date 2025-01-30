@@ -29,11 +29,11 @@ public class GenerateAiSummary {
     private IAiSummaryService aiSummaryService;
     //每天早晨6点,晚上6点生成一次
 //    @Scheduled(cron = "0 0 6,18 * * ?")
-    @Scheduled(cron = "0 0/5 * * * ?")
+    @Scheduled(cron = "0 0 6,18 * * ?")
     public void generateSummary() {
         List<Integer> sources = getSources();
         for (Integer source : sources) {
-            String aiSummary = aiSummaryService.getAISummary(source);
+            String aiSummary = aiSummaryService.getAISummary(aiSummaryService.buildContent(source));
             if(aiSummary == null || aiSummary.contains("请")) {
                 aiSummary = "暂无数据";
             }
